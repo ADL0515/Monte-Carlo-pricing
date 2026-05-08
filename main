@@ -1,0 +1,70 @@
+# American Call Option Pricing by Monte Carlo Simulation
+# Longstaff-Schwartz Method
+
+set.seed(123)
+
+# Parameters
+S0 <- 100        # current stock price
+K <- 100         # strike price
+r <- 0.08        # risk-free rate / risk-neutral drift
+sigma <- 0.20    # volatility
+T <- 3 / 12      # maturity: 3 months
+n_sim <- 10000   # number of simulation paths
+n_steps <- 50    # time steps
+
+dt <- T / n_steps
+
+# Simulate stock price paths
+S <- matrix(0, nrow = n_sim, ncol = n_steps + 1)
+S[, 1] <- S0
+
+for (t in 2:(n_steps + 1)) {
+  Z <- rnorm(n_sim)
+  S[, t] <- S[, t - 1] * exp((r - 0.5 * sigma^2) * dt +
+                               sigma * sqrt(dt) * Z)
+}
+
+# Payoff matrix for American call
+payoff <- pmax(S - K, 0)
+
+# Initialize cash flows at maturity
+cashflow <- payoff[, n_steps + 1]
+exercise_time <- rep(n_steps + 1, n_sim)
+
+# Backward induction using Longstaff-Schwartz
+for (t in n_steps:2) {
+  in_money <- which(payoff[, t] > 0)
+  
+  if (length(in_money) > 0) {
+    X <- S[in_money, t]
+    Y <- cashflow[in_money] * exp(-r * dt * (exercise_time[in_money] - t))
+    
+    # Regression basis: 1, S, S^2
+    fit <- lm(Y ~ X + I(X^2))
+    continuation_value <- predict(fit)
+    
+    exercise_value <- payoff[in_money, t]
+    exercise_now <- exercise_value > continuation_value
+    
+    idx_exercise <- in_money[exercise_now]
+    
+    cashflow[idx_exercise] <- exercise_value[exercise_now]
+    exercise_time[idx_exercise] <- t
+  }
+}
+
+# Discount cash flows to present
+discounted_cashflow <- cashflow * exp(-r * dt * (exercise_time - 1))
+
+# Option price estimate
+option_price <- mean(discounted_cashflow)
+
+# 95% confidence interval
+std_error <- sd(discounted_cashflow) / sqrt(n_sim)
+ci_lower <- option_price - 1.96 * std_error
+ci_upper <- option_price + 1.96 * std_error
+
+cat("American Call Option Price:", round(option_price, 4), "\n")
+cat("95% Confidence Interval: [",
+    round(ci_lower, 4), ",",
+    round(ci_upper, 4), "]\n")
