@@ -1,1 +1,2 @@
-# Monte-Carlo-pricing
+# Monte-Carlo-pricing via R
+# codex coding
